@@ -1,0 +1,189 @@
+#导入类库
+import numpy as np
+import pandas as pd
+from matplotlib import pyplot
+from pandas import DataFrame,Series
+from pandas import read_csv
+from pandas.plotting import scatter_matrix
+from pandas import set_option
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.model_selection import KFold
+from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import classification_report
+from sklearn.metrics import confusion_matrix
+from sklearn.metrics import accuracy_score
+from sklearn.pipeline import Pipeline
+from sklearn.linear_model import LogisticRegression
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.naive_bayes import GaussianNB
+from sklearn.svm import SVC
+from sklearn.ensemble import AdaBoostClassifier
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import ExtraTreesClassifier
+
+#导入数据
+data_train = pd.read_csv('titanic_train.csv')
+data_test = pd.read_csv('titanic_test.csv')
+
+data_train.head(10)
+
+'''PassengerId	乘客编号
+Survived	存活情况（存活：1 ; 死亡：0）
+Pclass	客舱等级
+Name	乘客姓名
+Sex	性别
+Age	年龄
+SibSp	同乘的兄弟姐妹/配偶数
+Parch	同乘的父母/小孩数
+Ticket	船票编号
+Fare	船票价格
+Cabin	客舱号
+Embarked	登船港口'''
+
+data_train.info()
+
+#查看数据类型
+set_option('display.max_rows', 500)
+print(data_train.dtypes)
+
+set_option('precision', 3)
+data_train.describe()
+
+#数据维度
+print(data_train.shape)
+
+#数据分类分布
+print(data_train.groupby(['Survived']).size())
+
+#空数据处理——Age中空数据用Age的中位数填充
+data_train["Age"] = data_train['Age'].fillna(data_train['Age'].median())  
+data_train.describe()
+
+#圆饼图
+data_train['Survived'].value_counts().plot.pie(labeldistance = 1.1,autopct = '%1.2f%%',
+                                               shadow = False,startangle = 90,pctdistance = 0.6)
+#labeldistance，文本的位置离远点有多远，1.1指1.1倍半径的位置
+#autopct，圆里面的文本格式，%3.1f%%表示小数有三位，整数有一位的浮点数
+#shadow，饼是否有阴影
+#startangle，起始角度，0，表示从0开始逆时针转，为第一块。一般选择从90度开始比较好看
+#pctdistance，百分比的text离圆心的距离
+#patches, l_texts, p_texts，为了得到饼图的返回值，p_texts饼图内部文本的，l_texts饼图外label的文本
+
+#关系矩阵图
+fig = pyplot.figure()
+ax = fig.add_subplot(111)
+cax = ax.matshow(data_train.corr(), vmin=-1, vmax=1, interpolation='none')
+fig.colorbar(cax)
+pyplot.show()
+
+#Sex性别列处理：male用0，female用1
+data_train.loc[data_train["Sex"] == "male","Sex"] = 0
+data_train.loc[data_train["Sex"] == "female","Sex"] = 1
+
+#缺失值用最多的S进行填充
+data_train["Embarked"] = data_train["Embarked"].fillna('S') 
+#地点用0,1,2
+data_train.loc[data_train["Embarked"] == "S","Embarked"] = 0    
+data_train.loc[data_train["Embarked"] == "C","Embarked"] = 1
+data_train.loc[data_train["Embarked"] == "Q","Embarked"] = 2
+
+data_train.head(10)
+
+#分离评估数据集
+predictors = ["Pclass","Sex","Age","SibSp","Parch","Fare","Embarked"]  
+array = data_train[predictors].values
+X = array[:, 0:6]
+Y = array[:, 6]
+validation_size = 0.2
+seed = 7
+X_train, X_validation, Y_train, Y_validation = train_test_split(X, Y, test_size=validation_size,random_state=seed)
+
+#评估算法的基准
+num_folds = 10
+seed = 7
+scoring = 'accuracy'
+
+#评估算法——原始数据
+models = {}
+models['LR'] = LogisticRegression()
+models['LDA'] = LinearDiscriminantAnalysis()
+models['KNN'] = KNeighborsClassifier()
+models['CART'] = DecisionTreeClassifier()
+models['NB'] = GaussianNB()
+models['SVM'] = SVC()
+results = []
+for key in models:
+    kfold = KFold(n_splits=num_folds, random_state=seed)
+    cv_results = cross_val_score(models[key], X_train, Y_train.astype('int'), cv=kfold, scoring=scoring)
+    results.append(cv_results)
+    print('%s : %f (%f)' % (key, cv_results.mean(), cv_results.std()))
+	
+#评估算法——箱线图
+fig = pyplot.figure()
+fig.suptitle('Algorithm Comparison')
+ax = fig.add_subplot(111)
+pyplot.boxplot(results)
+ax.set_xticklabels(models.keys())
+pyplot.show()
+
+#CART
+#将数据分为输入数据和输出数据
+array = data_train[predictors].values
+X = array[:,0:6]
+Y = array[:,6]
+num_folds = 10
+seed = 7
+kfold = KFold(n_splits=num_folds,random_state=seed)
+model = DecisionTreeClassifier()
+result = cross_val_score(model,X,Y.astype(int),cv=kfold)
+print(result.mean())
+
+#CART算法
+#初始化CART算法
+from sklearn import model_selection
+CART=DecisionTreeClassifier(random_state=7)
+re = CART.fit(data_train[predictors],data_train["Survived"])
+ 
+#使用sklearn库里面的交叉验证函数获取预测准确率分数
+scores = model_selection.cross_val_score(CART,data_train[predictors],data_train["Survived"],cv=10)
+ 
+#使用交叉验证分数的平均值作为最终的准确率
+print("准确率为: ",scores.mean())
+
+#新增：对测试集数据进行预处理，并进行结果预测
+#Age列中的缺失值用Age均值进行填充
+data_test["Age"] = data_test["Age"].fillna(data_test["Age"].median())
+#Fare列中的缺失值用Fare最大值进行填充
+data_test["Fare"] = data_test["Fare"].fillna(data_test["Fare"].max()) 
+ 
+#Sex性别列处理：male用0，female用1
+data_test.loc[data_test["Sex"] == "male","Sex"] = 0
+data_test.loc[data_test["Sex"] == "female","Sex"] = 1
+#缺失值用最多的S进行填充
+data_test["Embarked"] = data_test["Embarked"].fillna('S') 
+#地点用0,1,2
+data_test.loc[data_test["Embarked"] == "S","Embarked"] = 0    
+data_test.loc[data_test["Embarked"] == "C","Embarked"] = 1
+data_test.loc[data_test["Embarked"] == "Q","Embarked"] = 2
+ 
+test_features = ["Pclass","Sex","Age","SibSp","Parch","Fare","Embarked"] 
+#构造测试集的Survived列，
+data_test["Survived"] = -1
+ 
+test_predictors = data_test[test_features]
+data_test["Survived"] = CART.predict(test_predictors)
+
+data_test.head(10)
+
+#30棵决策树，停止的条件：样本个数为2，叶子节点个数为1
+alg=RandomForestClassifier(random_state=6,n_estimators=30,min_samples_split=2,min_samples_leaf=1) 
+kf=model_selection.KFold(n_splits=10,shuffle=False,random_state=6)
+scores=model_selection.cross_val_score(alg,data_train[predictors],data_train["Survived"],cv=kf)
+print(scores)
+print(scores.mean())
+
